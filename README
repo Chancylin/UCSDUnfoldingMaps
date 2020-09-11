@@ -1,6 +1,23 @@
 unfolding_app_template and UC San Diego/Coursera MOOC starter code
 ==================================================================
+2020/09/10
+This is my course work for the Coursera course "Object Oriented Programming in Java".
 
+There are two main parts of work in this repository:
+1. Finished all the assignment requirements from module1 to model6. Knowledge that has been covered 
+includes:
+    (1) Creating GUIs and Displaying Data;
+    (2) Important concepts in Object Oriented Programming: Inheritance, Polymorphism, etc.;
+    (3) GUIs: Responding to User Events;
+    (4) Basic sorting algorithms: Insertion Sort, Selection Sort.
+2. Work on (ongoing) my own extension to the package to add more functionalities, 
+which includes:
+    (1) When drag the mouse, it will select a rectangle region;
+    (2) A rectangle will be drawn on the map;
+    (3) And the summary information of Earthquake within the selected region will pop up in 
+        a box, which will give the total number of the Earthquake, largest Earthquake info, 
+        smallest Earthquake info. 
+==================================================================
 This is a skeleton to use Unfolding in Eclipse as well as some starter
 code for the Object Oriented Programming in Java course offered by 
 UC San Diego through Coursera.
