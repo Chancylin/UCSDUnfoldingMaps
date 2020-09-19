@@ -1,5 +1,7 @@
 package module6;
 
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,11 +16,15 @@ import de.fhpotsdam.unfolding.geo.Location;
 import de.fhpotsdam.unfolding.marker.AbstractShapeMarker;
 import de.fhpotsdam.unfolding.marker.Marker;
 import de.fhpotsdam.unfolding.marker.MultiMarker;
+import de.fhpotsdam.unfolding.marker.SimplePolygonMarker;
 import de.fhpotsdam.unfolding.providers.Google;
 import de.fhpotsdam.unfolding.providers.MBTilesMapProvider;
 import de.fhpotsdam.unfolding.utils.MapUtils;
 import parsing.ParseFeed;
 import processing.core.PApplet;
+
+import org.json.simple.JSONObject;
+import org.json.simple.JSONArray;
 
 /** EarthquakeCityMap
  * An application with an interactive map displaying earthquake data.
@@ -45,7 +51,7 @@ public class EarthquakeCityMap extends PApplet {
 	
 	
 
-	//feed with magnitude 2.5+ Earthquakes
+	//feed with magnitude 2.5+ Earthquakes (past week)
 	private String earthquakesURL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.atom";
 	
 	// The files containing city names and info and country names and info
@@ -66,6 +72,15 @@ public class EarthquakeCityMap extends PApplet {
 	// NEW IN MODULE 5
 	private CommonMarker lastSelected;
 	private CommonMarker lastClicked;
+	
+	// For box selection
+	private float boxTopLeftX, boxTopLeftY, boxBottomRightX, boxBottomRightY;
+	private float boxTopLeftLon, boxTopLeftLat, boxBottomRightLon, boxBottomRightLat;
+	private boolean boxSelected = false;
+	private char key_recorded;
+	private int mouseClickNum;
+	private List<Marker> selectedQuakes;
+	private boolean displaySelectedInfo;
 	
 	public void setup() {		
 		// (1) Initializing canvas and map tiles
@@ -145,7 +160,9 @@ public class EarthquakeCityMap extends PApplet {
 	public void draw() {
 		background(0);
 		map.draw();
+		if (boxSelected) {boxSelection();};
 		addKey();
+		addKeyMode();
 		
 	}
 	
@@ -210,6 +227,21 @@ public class EarthquakeCityMap extends PApplet {
 	}
 	
 	/** Event handler that gets called automatically when the 
+	 * key is pressed.
+	 */
+	public void keyPressed() {
+		System.out.println(key);
+		key_recorded = key;
+		// if (key_recorded != 's') {
+		if (key_recorded == 'q') {
+			mouseClickNum = 0;
+			boxSelected = false;
+			selectedQuakes.clear();
+			displaySelectedInfo = false;
+		}
+		
+	}
+	/** Event handler that gets called automatically when the 
 	 * mouse moves.
 	 */
 	@Override
@@ -253,6 +285,81 @@ public class EarthquakeCityMap extends PApplet {
 	@Override
 	public void mouseClicked()
 	{
+		if (key_recorded == 's') { // enter selection mode
+			if (mouseClickNum < 2) { // check if we have two selected point
+				if (mouseClickNum == 0) { // collect the first point
+					mouseClickNum = 1;
+					boxTopLeftX = mouseX;
+					boxTopLeftY = mouseY;
+					System.out.println("the first point is selected");
+				}
+				else if (mouseClickNum == 1) { // collect the second point
+					mouseClickNum = 2;
+					boxBottomRightX = mouseX;
+					boxBottomRightY = mouseY;
+					boxSelected = true;
+					System.out.println("the second point is selected");
+					
+					int totalSelected = selectQuakes();
+					// selectedQuakeInfo = true;
+					if (totalSelected > 0) {
+						displaySelectedInfo = true;
+					}
+				}
+			}
+			
+			if (boxSelected == true && mouseButton == RIGHT) {
+				JSONArray selectedQuakesList = new JSONArray();
+				// save the selected quakes info into csv
+				for (Marker mk : selectedQuakes) {
+					// covert to json
+					JSONObject jsonObj = new JSONObject();
+					// info to store
+					String[] infoList = {"title", "magnitude",
+							"depth", "location", "isOnLand", "age",};
+					for (String info : infoList) {
+						
+						if (info.equals("location")) {
+							jsonObj.put(info, mk.getLocation().toString());
+						}
+						else if (info.equals("isOnLand")) {
+							EarthquakeMarker quakeMk = (EarthquakeMarker) mk;
+							jsonObj.put(info, quakeMk.isOnLand());
+						}
+						else {
+							jsonObj.put(info, mk.getProperty(info));
+						}
+					}
+					selectedQuakesList.add(jsonObj);
+					// String jsonText = jsonObj.toString();
+					// System.out.println(jsonText);
+				}
+				//Write JSON file
+				String fileSaveLoc = "../data/selected_earthquakes.json";
+		        try (FileWriter file = new FileWriter(fileSaveLoc)) {
+		 
+		            file.write(selectedQuakesList.toJSONString());
+		            file.flush();
+		            //
+		            System.out.println("Selected Earthquake saved in " + fileSaveLoc);
+		 
+		        } catch (IOException e) {
+		            e.printStackTrace();
+		        }
+			
+			}
+			
+//			if (mouseButton == RIGHT && boxSelected) {
+//				int totalSelected = selectQuakes();
+//				// selectedQuakeInfo = true;
+//				if (totalSelected > 0) {
+//					displaySelectedInfo = true;
+//				}
+//			}
+			
+			return;
+		}
+		
 		if (lastClicked != null) {
 			unhideMarkers();
 			lastClicked = null;
@@ -394,8 +501,101 @@ public class EarthquakeCityMap extends PApplet {
 		
 		
 	}
-
+	// helper functions for my extension
+	private int selectQuakes() {
+		// TODO: use map.getLocation(float x, float y)
+		// to convert the box boundary to geo boundary
+		// so we can select the earthquakes inside the box
+		Location geoPoint1 = map.getLocation(boxTopLeftX, boxTopLeftY);
+		boxTopLeftLon = geoPoint1.getLon();
+		boxTopLeftLat = geoPoint1.getLat();
+		
+		Location geoPoint3 = map.getLocation(boxBottomRightX, boxBottomRightY);
+		boxBottomRightLon = geoPoint3.getLon();
+		boxBottomRightLat = geoPoint3.getLat();
+		
+		Location geoPoint2 = new Location(boxTopLeftLat, boxBottomRightLon);
+		Location geoPoint4 = new Location(boxBottomRightLat, boxTopLeftLon);
+		
+		//.isInsideByLocation
+		
+		List<Location> listLoc = Arrays.asList(geoPoint1, geoPoint2, geoPoint3, geoPoint4);
+		AbstractShapeMarker boxGeo = new SimplePolygonMarker(listLoc);
+		
+		//
+		selectedQuakes = new ArrayList<Marker>();
+		//
+		for (Marker mk : quakeMarkers) {
+			if (boxGeo.isInsideByLocation(mk.getLocation())) {
+				selectedQuakes.add(mk);
+			}
+		}
+		
+		return selectedQuakes.size();
+		
+	}
 	
+	private void boxSelection() {
+		line(boxTopLeftX, boxTopLeftY, boxBottomRightX, boxTopLeftY);
+		line(boxBottomRightX, boxTopLeftY, boxBottomRightX, boxBottomRightY);
+		line(boxBottomRightX, boxBottomRightY, boxTopLeftX, boxBottomRightY);
+		line(boxTopLeftX, boxBottomRightY, boxTopLeftX, boxTopLeftY);
+
+	}
+	
+	private void addKeyMode() {
+		if (key_recorded == 's' || boxSelected) {
+			
+			fill(255, 255, 255);
+			
+			int xbase = 25;
+			int ybase = 320;
+			
+			rect(xbase, ybase, 150, 200);
+			
+			fill(0);
+			textAlign(LEFT, CENTER);
+			textSize(15);
+			text("Selection Mode:", xbase+10, ybase+20);
+			textSize(12);
+			text("Click the mouse twice", xbase+20, ybase+45);
+			text("to select two points;", xbase+20, ybase+65);
+			//
+			text("To save selected", xbase+10, ybase+95);
+			text("earthquakes info: ", xbase+10, ybase+115);
+			text("Right Click", xbase+20, ybase+135);
+			//
+			text("To exit: Press Key q", xbase+10, ybase+165);
+			//text("other than 's'.", xbase+20, ybase+185);
+			
+			// display some basic info of the selected earthquakes
+			
+			if (displaySelectedInfo) {
+				fill(250, 250, 230, (float) 200.0);
+				
+				int xInfo = 600;
+				int yInfo = 70;
+				
+				rect(xInfo, yInfo, 200, 160);
+				
+				fill(0);
+				textAlign(LEFT, CENTER);
+				textSize(12);
+				text("NO. of Events Selected: ", xInfo+10, yInfo+20);
+				text(Integer.toString(selectedQuakes.size()), xInfo+10, yInfo+40);
+				//
+				text("Latitude Range: ", xInfo+10, yInfo+60);
+				// String.format ("%,.2f", number)
+				String latRange = String.format("%,.2f", boxBottomRightLat) + " --- " + String.format("%,.2f", boxTopLeftLat);
+				text(latRange, xInfo+10, yInfo+80);
+				String lonRange = String.format("%,.2f", boxTopLeftLon) + " --- " + String.format("%,.2f", boxBottomRightLon);
+				text("Longitude Range: ", xInfo+10, yInfo+100);
+				text(lonRange, xInfo+10, yInfo+120);
+				
+				
+			}
+		}
+	}
 	
 	// Checks whether this quake occurred on land.  If it did, it sets the 
 	// "country" property of its PointFeature to the country where it occurred
